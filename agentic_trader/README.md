@@ -52,7 +52,7 @@ python3 -m agent_trader cache-status                                  # what dat
 python3 -m agent_trader backtest --feed cached --conviction 0.85      # real bars
 python3 -m agent_trader backtest --feed cached --conviction 0.20      # gate veto: 0 trades
 python3 -m agent_trader gate-demo                                     # fail-closed matrix
-python3 -m unittest discover -s tests -t .                            # 176 tests
+python3 -m unittest discover -s tests -t .                            # 192 tests
 ```
 
 No dependencies: standard library only, Python 3.10+.

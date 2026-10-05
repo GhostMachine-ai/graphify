@@ -118,3 +118,16 @@ Format is YAML frontmatter (`name`, `description`, optional `tools` and `model`)
 the system prompt. The `description` is the routing signal: write it as *when to use this*,
 because that is what the dispatcher matches against. Keep `tools` as narrow as the job allows
 — an auditing agent should not be able to write.
+
+## Why none of these pin a `model:`
+
+Static analysis will flag the three agent files for having no `model` in their
+frontmatter. That is deliberate. Omitting it makes an agent inherit the model of
+the session that dispatched it, which is almost always what you want: a reviewer
+running at the same capability as the work being reviewed, and no silent pin to a
+model name that will eventually be retired.
+
+Pin one only when an agent has a genuine capability floor or ceiling. If
+`extractor-migrator` ever starts producing non-verbatim "improvements" during a
+port, that is the signal to pin it to a stronger model — the byte-identity check
+in its own instructions is what would catch it.

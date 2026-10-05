@@ -40,7 +40,7 @@ _(filled in at completion)_
 
 ## Review (2026-10-05)
 
-**Delivered.** `agentic_trader/` — 13 modules, 176 tests, 4 docs, 2 scripts.
+**Delivered.** `agentic_trader/` — 14 modules, 192 tests, 4 docs, 2 scripts.
 Standard-library only; `pyproject.toml` and `uv.lock` untouched.
 
 **The result is negative and that is the headline.** On 630 real daily bars the

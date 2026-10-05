@@ -73,3 +73,18 @@ number alone concealed it.
 **Rule.** No strategy return is ever reported without its benchmark. It is now
 computed by the same code path that prints the performance report, so the two
 cannot be separated.
+
+## 2026-10-05 — Hand-exercising a CLI is not testing it
+**What happened.** A bot audit flagged "CLI changes may ship without shell or
+end-to-end coverage." It was right. Every CLI path had been run by hand and all
+worked, but nothing automated covered argument parsing, exit codes, or stdout, so
+a regression in `__main__.py` or an exit status would have passed silently.
+**Rule.** A CLI gets subprocess-level tests that assert exit codes and output, not
+just in-process calls to `main()`. Added `tests/test_cli.py` (16 tests, 192 total).
+
+## 2026-10-05 — Assert on normalized text, not on a particular line break
+**What happened.** A CLI test asserted `"not investment advice" in stdout` and
+failed: argparse hard-wraps its description, so the string appeared as
+`"not\ninvestment advice"`. The disclaimer was present; the matcher was brittle.
+**Rule.** When asserting against formatted CLI output, collapse whitespace first
+(`" ".join(text.split())`). Otherwise the test is coupled to terminal width.
