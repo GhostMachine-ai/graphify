@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -87,11 +88,21 @@ class RiskManager:
         notional would be misreporting its own risk, so the binding constraint is
         returned and the engine records it.
         """
+        # math.isfinite first: every comparison against NaN is False, so a bare
+        # `atr <= 0` lets NaN straight through and the function then returns a
+        # confidently-labelled decision with a non-zero unit count and an
+        # unknowable risk -- the worst possible shape for a sizing result.
+        if not all(math.isfinite(v) for v in (equity, atr, atr_multiple, price)):
+            return SizingDecision(0.0, "invalid_inputs", 0.0, 0.0)
         if atr <= 0 or atr_multiple <= 0 or price <= 0 or equity <= 0:
             return SizingDecision(0.0, "invalid_inputs", 0.0, 0.0)
 
         risk_dollars = equity * self.config.risk_per_trade
         stop_distance = atr * atr_multiple
+        # Guard the product, not its factors: both can be positive while the
+        # product underflows to exactly 0.0 (e.g. atr=5e-324, multiple=1e-9).
+        if stop_distance <= 0 or not math.isfinite(stop_distance):
+            return SizingDecision(0.0, "invalid_inputs", 0.0, 0.0)
         atr_units = risk_dollars / stop_distance
         cap_units = (equity * self.config.max_notional_per_position) / price
 

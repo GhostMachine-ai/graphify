@@ -19,31 +19,65 @@ IBIT, pulled from the RobinHood MCP connector:
 
 | | Return | Trades | Win rate | Profit factor | Sharpe | Max DD |
 |---|---|---|---|---|---|---|
-| Strategy book | **−6.37%** | 70 | 35.7% | 0.69 | −0.67 | 10.10% (halted) |
-| Strategy, breaker off | **−5.89%** | 144 | 40.3% | 0.84 | −0.45 | 14.21% |
+| Strategy book, breaker off | **+3.26%** | 140 | 44.3% | 1.09 | +0.24 | 10.44% |
+| Strategy book, 10% breaker | **−5.06%** | 88 | 36.4% | 0.80 | −0.39 | 10.18% (halted) |
 | Equal-weight buy & hold | **+60.75%** | — | — | — | — | — |
 
-**The book lost ~6% over a window in which simply holding the same five
-instruments returned ~61%.** A shortfall of roughly 67 percentage points. Every
-strategy lost money and every symbol lost money.
+**The book is roughly flat, and it loses to buy-and-hold by 57 percentage
+points.** Holding the same five instruments over the same window returned
++60.75%; trading them with this logic returned +3.26% while taking a 10% drawdown
+to do it.
 
-This is not a costs problem — fees were $517, about 9% of the loss. The diagnosis
-is in the exit reasons:
+A profit factor of 1.09 and a Sharpe of +0.24 over a single window are
+noise-level, not evidence of edge. The honest summary is that this book does not
+beat doing nothing, and costs real risk to break roughly even.
+
+Two findings worth more than the headline:
+
+**The 10% drawdown breaker makes the outcome worse, not better.** It halts the run
+at the first 10% drawdown and liquidates, locking in −5.06%, where letting the
+book run recovers to +3.26%. A circuit breaker is a risk control, not a neutral
+observer — it changes what the backtest measures, and on this data it converted a
+breakeven result into a loss.
+
+**Gap risk dominates the loss side.** Of 140 trades:
 
 ```
-  73 trades  −$19,856  stop_hit
-  41 trades  +$19,171  reverted_to_mean
-  29 trades   −$5,393  stop_gap_through_open
+  72 trades  −$12,421  stop_hit                 (−$173 average)
+  50 trades  +$25,868  reverted_to_mean         (+$517 average)
+  17 trades  −$10,392  stop_gap_through_open    (−$611 average)
 ```
 
-Mean reversion's winners were almost exactly cancelled by its stop-outs, and gap
-losses finished the job. That is what short-volatility logic does in a trending
-market: it sells strength and buys weakness while the trend keeps going, and
-normal pullbacks take out ATR stops. Trend following fired only 8 times in 630
-bars, because EMA50/200 crossovers are rare, and lost on 6 of them.
+Only 17 trades exited through a gap, but they averaged 3.5× the loss of an
+ordinary stop-out — an overnight gap turns a stop into a market order at whatever
+price opens. That is the single largest controllable risk in the book, and no
+amount of ATR sizing addresses it.
 
-**Treat this as a working engine with an unprofitable strategy book, not as a
-trading system.** The engine is verified; the edge is absent.
+Fees were $528 against gross PnL of $3,784, so costs are 16% of the profit but not
+the story.
+
+### A correction, and why it matters
+
+**An earlier version of this README reported −5.89%.** That figure was wrong, and
+the cause was a bug in this engine, not in the data.
+
+The trailing stop was being ratcheted using a bar's own high and then tested
+against that same bar's low — which silently assumes the high occurred before the
+low, something OHLC does not record. For `O=109 H=110 L=99` on a long stopped at
+98 with a 2-ATR trail, the old code lifted the stop to 108 and then "stopped out"
+at 108, booking a **+800 profit and labelling it a stop exit**. A trailing stop
+cannot fill above its own trail level; that was the tell.
+
+Correcting the ordering moved the result by **9.15 percentage points and flipped
+its sign**. Every number above is post-fix.
+
+The failure that let it through is worth recording: the entire 192-test suite
+passed under *either* ordering. `test_execution.py` tested `update_extreme` and
+`stop_hit` in isolation, `test_risk.py` tested `trail_stop` in isolation, and
+nothing tested their composition inside the engine loop. It was found by an
+independent verification pass, not by the tests. `tests/test_intrabar_stop_ordering.py`
+now pins the ordering with a golden test over the committed bars, and that test is
+verified to fail if the ordering is reverted.
 
 ## Quick start
 

@@ -55,6 +55,26 @@ class StrategyConfig:
     atr_period: int = 14
     atr_stop_multiple: float = 2.0
 
+    def __post_init__(self) -> None:
+        # Without this, atr_stop_multiple=0 is accepted and then sizes every
+        # position at zero units, so the run completes with 0 trades and no
+        # error -- a config typo that reads as "the strategy never triggered".
+        if self.atr_stop_multiple <= 0:
+            raise ValueError("atr_stop_multiple must be positive")
+        for name in ("sma_period", "donchian_period", "fast_ema", "slow_ema",
+                     "atr_period"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.band_sigma < 0:
+            raise ValueError("band_sigma must be non-negative")
+        if self.volume_surge_multiple <= 0:
+            raise ValueError("volume_surge_multiple must be positive")
+        if self.fast_ema >= self.slow_ema:
+            raise ValueError(
+                f"fast_ema ({self.fast_ema}) must be shorter than "
+                f"slow_ema ({self.slow_ema})"
+            )
+
 
 @dataclass
 class GateConfig:

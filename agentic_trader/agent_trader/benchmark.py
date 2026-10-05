@@ -1,10 +1,11 @@
 """Buy-and-hold benchmark.
 
 A strategy return reported on its own is close to meaningless. The real-data run
-in this repository returned **-5.89%** over a period in which equal-weight
+in this repository returned **+3.26%** over a period in which equal-weight
 buy-and-hold on the same five instruments returned **+60.75%** -- a shortfall of
-66 percentage points. A report showing only "-5.89%" understates that badly, and
-one showing only "profit factor 0.84" hides it completely.
+57 percentage points. "+3.26%" reads like a modest win; it is in fact a large
+loss against the alternative of doing nothing, and "profit factor 1.09" hides
+that completely.
 
 So the benchmark is computed by the same code path that prints the performance
 report, and the CLI always shows both.

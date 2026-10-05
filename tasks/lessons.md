@@ -88,3 +88,42 @@ failed: argparse hard-wraps its description, so the string appeared as
 `"not\ninvestment advice"`. The disclaimer was present; the matcher was brittle.
 **Rule.** When asserting against formatted CLI output, collapse whitespace first
 (`" ".join(text.split())`). Otherwise the test is coupled to terminal width.
+
+## 2026-10-05 — Intra-bar ordering is a lookahead surface, and unit tests cannot see it
+**What happened.** The engine ratcheted the trailing stop using a bar's own high
+and then tested that raised stop against the same bar's low. That assumes the high
+preceded the low, which OHLC does not record. For O=109 H=110 L=99 on a long
+stopped at 98 with a 2-ATR trail, it lifted the stop to 108 and "stopped out" at
+108 — booking a +800 profit and calling it a stop exit. A trailing stop cannot
+fill above its own trail level; that was the tell. Cost: 9.15 percentage points on
+the real-data result, and the sign of the headline number flipped from -5.89% to
++3.26%.
+**Root cause.** Two correct components composed in the wrong order. The whole
+192-test suite passed under *either* ordering: `test_execution.py` tested
+`update_extreme` and `stop_hit` in isolation, `test_risk.py` tested `trail_stop`
+in isolation, and nothing tested the composition inside the engine loop.
+**Rule.** A no-lookahead test that mutates *future* bars cannot catch intra-bar
+leakage, because the bug lives inside one bar. Any state that both updates from a
+bar and is tested against that bar needs an explicit ordering test at the
+*engine* level, and that test must be proven to fail when the order is reverted.
+
+## 2026-10-05 — A regression test is worthless until you watch it fail
+**What happened.** After fixing the ordering I wrote three regression tests and
+all 206 passed — then passed again with the bug deliberately reintroduced. Two
+were unit tests calling the components in the right order by hand, which cannot
+detect the engine composing them wrongly: I had reproduced the exact blind spot I
+was trying to close. A third asserted "a long stop exit cannot fill above entry",
+which is simply false for a *trailing* stop; 8 of 32 long stop exits legitimately
+do that.
+**Rule.** Never add a regression test without reverting the fix and confirming it
+fails. An invariant must be checked against reality before being asserted. What
+finally discriminated was a golden test over frozen committed data.
+
+## 2026-10-05 — A no-op str.replace is silent
+**What happened.** Four edits to `docs/RISKS.md` did nothing, because the
+replacement strings used ASCII hyphen `-` where the file contained Unicode minus
+`−` (U+2212). `str.replace` returns the unchanged string and raises nothing, so
+the script reported success while the stale figures stayed on disk.
+**Rule.** After a scripted replacement, grep for the old value to confirm it is
+gone. For anything beyond a couple of substitutions, rewrite the file instead of
+patching it.

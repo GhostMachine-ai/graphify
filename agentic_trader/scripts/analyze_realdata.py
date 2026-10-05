@@ -107,5 +107,9 @@ print("=" * 72)
 print(f"  total fees paid      ${pfull.total_fees:,.2f}")
 print(f"  gross pnl before fees ${pfull.total_pnl + pfull.total_fees:,.2f}")
 print(f"  net pnl               ${pfull.total_pnl:,.2f}")
-print(f"  fees as share of the loss: "
-      f"{pfull.total_fees / abs(pfull.total_pnl):.1%}" if pfull.total_pnl else "n/a")
+if pfull.total_pnl:
+    word = "profit" if pfull.total_pnl > 0 else "loss"
+    print(f"  fees as share of the {word}: "
+          f"{pfull.total_fees / abs(pfull.total_pnl):.1%}")
+else:
+    print("  fees as share of pnl: n/a (pnl is zero)")

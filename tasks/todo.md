@@ -40,16 +40,27 @@ _(filled in at completion)_
 
 ## Review (2026-10-05)
 
-**Delivered.** `agentic_trader/` — 14 modules, 192 tests, 4 docs, 2 scripts.
+**Delivered.** `agentic_trader/` — 14 modules, 206 tests, 4 docs, 2 scripts.
 Standard-library only; `pyproject.toml` and `uv.lock` untouched.
 
-**The result is negative and that is the headline.** On 630 real daily bars the
-book returned −5.89% while equal-weight buy-and-hold on the same five instruments
-returned +60.75%. Every strategy lost; every symbol lost. Fees were only 9% of the
-loss, so this is a strategy problem, not a cost problem. The engine is verified;
-the edge is absent. The README leads with this rather than burying it.
+**The result, after a significant correction.** On 630 real daily bars the book
+returns **+3.26%** against **+60.75%** for equal-weight buy-and-hold — a 57-point
+shortfall with a 10% drawdown taken to get there. PF 1.09 and Sharpe +0.24 over
+one untuned window are noise, not edge.
 
-**Five bugs my own verification caught, all in my first drafts:**
+**The originally-reported −5.89% was wrong, and the cause was my own bug.** The
+trailing stop was ratcheted with a bar's own high then tested against that bar's
+low — intra-bar lookahead. Fixing it moved the result 9.15 points and flipped its
+sign. Found by an independent verification pass, NOT by the 192-test suite, which
+passed under both orderings. Now pinned by a golden test proven to fail if
+reverted.
+
+Two findings that outrank the headline: the 10% drawdown breaker makes the outcome
+*worse* (+3.26% -> -5.06%, by liquidating at the first 10% drawdown), and gap
+risk is the dominant loss channel (17 of 140 trades, -$611 average vs -$173 for an
+ordinary stop-out).
+
+**Ten bugs caught before merge — five by my own verification, five by an independent pass:**
 
 1. `sharpe([0.01]*10)` returned **8.68e16** instead of 0. The `sd == 0` guard never
    fired because the float variance of a constant series is a denormal (~2e-18),
@@ -66,6 +77,30 @@ the edge is absent. The README leads with this rather than burying it.
    target for every realistic instrument, so realised risk is below 1% (GLD $168,
    BTC $632 against a $1,000 target). The engine now reports which constraint bound
    instead of claiming a flat 1%.
+
+**Five more found by the independent verification pass:**
+
+6. **HIGH — intra-bar lookahead in the trailing stop.** Ratcheted with a bar's own
+   high, then tested against that bar's low. Worth 9.15 points and flipped the
+   headline's sign. Invisible to the suite; now pinned by a golden test proven to
+   fail on revert.
+7. `size_detail` raised `ZeroDivisionError` when `atr * atr_multiple` underflowed
+   to exactly 0.0 while both factors were positive (e.g. 5e-324 x 1e-9). The guard
+   checked the factors, not the product.
+8. NaN leaked past that same guard (`nan <= 0` is False), returning a confident
+   `units=200.0` with `implied_risk=nan`. `_consider_entry` had the same hole, so a
+   NaN ATR from a malformed feed could have opened a position of unknowable risk.
+   Both now use `math.isfinite`.
+9. The equity curve appended a duplicate final timestamp, producing a return over
+   zero elapsed time and making `infer_periods_per_year` report 252 where 251 was
+   right. The final mark now replaces rather than duplicates.
+10. `StrategyConfig` had no validation, so `atr_stop_multiple=0` was accepted and
+    silently produced a 0-trade run that read as "the strategy never triggered".
+
+**Two of my own regression tests initially failed to catch bug 6** — they tested
+the components in the right order by hand, reproducing the blind spot. One asserted
+an invariant ("a long stop exit cannot fill above entry") that is false for a
+trailing stop. Recorded in lessons.md.
 
 **One thing I could not verify:** the LLMQuant feed. `LLMQUANT_API_KEY` is unset,
 so it is tested only against a fake transport and is marked unverified in the code,

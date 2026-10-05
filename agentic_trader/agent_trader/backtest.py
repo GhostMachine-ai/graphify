@@ -21,6 +21,7 @@ arrives only as a local file read through :mod:`agent_trader.gate`.
 
 from __future__ import annotations
 
+import math
 from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -153,10 +154,24 @@ class Backtester:
                     )
 
                 # 2. resolve stops before any new decision.
+                #
+                # ORDER IS CRITICAL. The stop tested against this bar must be the
+                # stop that was already in effect when the bar began -- NOT one
+                # ratcheted up using this bar's own high.
+                #
+                # Raising the stop from bar.high and then testing it against
+                # bar.low silently assumes the high occurred before the low, and
+                # OHLC does not record the intra-bar path. For O=109 H=110 L=99
+                # on a long stopped at 98 with a 2-ATR trail, ratcheting first
+                # lifts the stop to 108 and then "stops out" at 108 -- booking a
+                # +800 profit on a trade the stop never actually touched. A
+                # trailing stop cannot profit above its own trail level; that is
+                # the tell. If the path was 109 -> 99 -> 110, the stop was still
+                # 98 when price reached 99 and there was no exit at all.
+                #
+                # So: test first, then ratchet for the NEXT bar.
                 pos = positions.get(symbol)
                 if pos is not None:
-                    self.execution.update_extreme(pos, bar)
-                    pos.stop_price = self.risk.trail_stop(pos, sc.atr_stop_multiple)
                     hit, ref, why = self.execution.stop_hit(pos, bar)
                     if hit:
                         trade, delta = self.execution.close_position(
@@ -165,6 +180,11 @@ class Backtester:
                         result.trades.append(trade)
                         cash += delta
                         del positions[symbol]
+                    else:
+                        self.execution.update_extreme(pos, bar)
+                        pos.stop_price = self.risk.trail_stop(
+                            pos, sc.atr_stop_multiple
+                        )
 
                 # 3. ask the strategy.
                 signal = strat.evaluate(i, positions.get(symbol))
@@ -211,9 +231,18 @@ class Backtester:
 
         result.ending_equity = cash
         if result.equity_curve:
-            result.equity_curve.append(
-                EquityPoint(ts=final_ts, equity=cash, cash=cash, open_positions=0)
-            )
+            # The post-flatten mark REPLACES the in-loop mark at the same instant
+            # rather than being appended beside it. Appending produced two points
+            # at one timestamp, which is a return computed over zero elapsed time:
+            # it broke the "uniform time series" precondition the metrics rely on,
+            # made infer_periods_per_year read 252 where 251 was right, and made
+            # write_daily_pnl double-count the final session.
+            final = EquityPoint(ts=final_ts, equity=cash, cash=cash,
+                                open_positions=0)
+            if result.equity_curve[-1].ts == final_ts:
+                result.equity_curve[-1] = final
+            else:
+                result.equity_curve.append(final)
 
         ppy = infer_periods_per_year([pt.ts for pt in result.equity_curve])
         perf = summarize(result.trades, result.equity_curve,
@@ -282,7 +311,9 @@ class Backtester:
     ) -> None:
         """Run risk then the conviction gate; queue for the next bar if both pass."""
         atr = signal.atr
-        if atr is None or atr <= 0:
+        # `nan <= 0` is False, so a bare comparison would let a NaN ATR from a
+        # malformed feed reach sizing and open a position of unknowable risk.
+        if atr is None or not math.isfinite(atr) or atr <= 0:
             result.record_denial("no_atr")
             return
         pre = self.risk.can_open(signal.symbol, signal.side, positions)
