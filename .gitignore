@@ -16,7 +16,12 @@ build/
 graphify-out/
 .graphify_*.json
 .graphify_python
-.claude/
+# Ignore local Claude Code state (settings.local.json, installed skills) but keep the
+# checked-in subagent definitions. Written as `.claude/*` rather than `.claude/` because
+# git cannot re-include a path whose parent directory is itself excluded.
+.claude/*
+!.claude/agents/
+!.claude/agents/**
 skills/
 # The packaged skill bundles under graphify/skills/ are generated, committed
 # artifacts (rendered by tools/skillgen). Keep them tracked even though the
