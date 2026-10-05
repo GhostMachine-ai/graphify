@@ -1,0 +1,75 @@
+# Lessons
+
+## 2026-10-05 — A status report is not evidence
+**What happened.** A detailed deliverable report claimed `agentic_trader` was built, tested
+(30 tests, 2.872s) and shipped at `/working_dir/c_46144729e92b7656/agentic_trader/`. Checking
+the filesystem showed no `/working_dir/` at all, no `agentic_trader/` anywhere, and no `tasks/`.
+**Root cause.** The report came from a different session/container. Prose describing completed
+work is not the work.
+**Rule.** Before continuing or citing prior work, `ls` the path. Never restate another session's
+metrics as verified. Re-run the suite or say the claim is unverified.
+
+## 2026-10-05 — Synthetic random-walk data cannot validate a strategy
+**What happened.** The same report cited backtests on bars from a "geometric Brownian motion
+generator" as confirming the system worked. GBM is memoryless: no trend, no mean reversion, no
+volume–price relationship. Momentum and mean-reversion strategies have nothing to exploit, and
+the reported run was in fact a loss (-2.18%, profit factor 0.93, Sharpe -0.01).
+**Root cause.** Conflating "the plumbing executes" with "the strategy has edge."
+**Rule.** Synthetic data is for deterministic unit tests only. Any performance claim must come
+from real bars, and a passing test suite is never presented as evidence of profitability.
+
+## 2026-10-05 — A dependency is a CI contract, not a convenience
+**What happened.** graphify's CI runs `uv run --frozen`, installing strictly from the committed
+`uv.lock`. Adding numpy/pandas to a sub-package would churn the lock and break that invariant.
+**Rule.** In this repo, new code is standard-library only unless the user explicitly accepts a
+lockfile change. Check how CI installs before reaching for a dependency.
+
+## 2026-10-05 — MCP tools belong to the agent, not to the runtime
+**What happened.** The data design implied the engine calls market-data APIs directly. The
+RobinHood/LLMQuant MCP tools are available to the agent in-session, not to a spawned Python
+process.
+**Rule.** Real data crosses that boundary through an explicit cache file on disk. Document the
+boundary in the code; do not write docstrings implying a live call the library cannot make.
+
+## 2026-10-05 — A float guard for "exactly zero" usually does not fire
+**What happened.** `sharpe()` guarded with `if sd == 0: return 0.0` and still
+returned 8.68e16 for a constant return series. `sum([0.01]*10)/10` is
+0.009999999999999998, not 0.01, so deviations are ~1e-18, the variance is a
+denormal, and the mean/sd ratio explodes.
+**Rule.** Never test a computed float against exact zero as a degeneracy guard.
+Compare the spread against the magnitude of the quantity it scales:
+`sd <= max(abs(mean), 1.0) * 1e-12`.
+
+## 2026-10-05 — Assert the accounting identity, or the numbers are decoration
+**What happened.** `ending_equity` differed from `starting_equity + sum(pnl)` by
+$291.22 — the sum of entry fees, charged to cash but omitted from `trade.pnl`.
+Every performance metric was quietly wrong.
+**Rule.** Any ledger-like system gets a conservation test asserted to the cent, as
+a test and not a one-off check. For this engine the invariant is
+`ending == starting + sum(trade.pnl)`.
+
+## 2026-10-05 — Annualisation must count real observations, not nominal spacing
+**What happened.** Inferring periods/year from the median bar gap read a year of
+SPY 15-minute bars as 35,064 periods. Only ~6,552 exist: the market is closed
+overnight and at weekends. Sharpe would have been inflated by ~2.3x on every
+equity instrument.
+**Rule.** Annualise by observed marks divided by elapsed calendar time. Gaps in
+the session calendar then absorb themselves. Also mark equity once per timestamp,
+never once per (symbol, bar) event, or the series is not uniform in time.
+
+## 2026-10-05 — Two risk constraints means reporting which one bound
+**What happened.** The ATR sizing rule was documented as giving "constant dollar
+risk" of 1%. It does not: a notional cap applies too, and for every realistic
+instrument the cap binds first, so realised risk was $168-$632 against a $1,000
+target. The docstring was a lie my own verification caught.
+**Rule.** When two limits can bind, return which one did. A system that reports a
+risk budget it is not actually taking is misreporting its own risk.
+
+## 2026-10-05 — Always report the benchmark beside the strategy
+**What happened.** The book returned -5.89%, which reads as a mild
+disappointment. Equal-weight buy-and-hold on the same instruments over the same
+window returned +60.75%. The real result is a 67-point shortfall, and the strategy
+number alone concealed it.
+**Rule.** No strategy return is ever reported without its benchmark. It is now
+computed by the same code path that prints the performance report, so the two
+cannot be separated.

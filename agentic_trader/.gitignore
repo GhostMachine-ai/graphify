@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.tmp
+# Journal output is a run artifact, not source.
+out/
+trades.csv
+daily_pnl.csv
+# The operator kill switch is local state, never committed -- a committed KILL
+# file would silently disable trading for everyone who cloned the repo.
+shared/control/KILL
